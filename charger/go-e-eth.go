@@ -2,6 +2,7 @@ package charger
 
 import (
 	"fmt"
+        "time"
 
 	"github.com/andig/evcc/api"
 	"github.com/andig/evcc/util"
@@ -15,7 +16,7 @@ const (
 	goEEthRegEnable     = 200 // Holding
 
 	goEEthRegPower  = 120 // power reading in 0.01kW
-	goEEthRegEnergy = 128 // energy reading in 0.1kWh
+	goEEthRegEnergy = 132 // energy loaded in deka watt
 )
 
 var goEEthRegCurrents = []uint16{114, 116, 118} // current readings
@@ -97,7 +98,7 @@ func (wb *GoEEth) Status() (api.ChargeStatus, error) {
 	case 0: // unkown, defect
             return api.StatusF, nil
         case 1: // WB ready, no car
-	    return api.StatusB, nil
+	    return api.StatusA, nil
         case 2: // car charging
             return api.StatusC, nil
         case 3: // WB ready, waiting for car
@@ -127,6 +128,8 @@ func (wb *GoEEth) Enable(enable bool) error {
 	}
 
 	_, err := wb.conn.WriteSingleRegister(goEEthRegEnable, u)
+        //let charger settle after update
+        defer time.Sleep(2 * time.Second) 
 
 	return err
 }
@@ -149,7 +152,7 @@ func (wb *GoEEth) currentPower() (float64, error) {
 		return 0, err
 	}
 
-	return rs485.RTUUint32ToFloat64Swapped(b) * 100, err
+	return rs485.RTUUint32ToFloat64Swapped(b) / 100, err
 }
 
 // totalEnergy implements the api.MeterEnergy interface
@@ -159,7 +162,7 @@ func (wb *GoEEth) totalEnergy() (float64, error) {
 		return 0, err
 	}
 
-	return rs485.RTUUint32ToFloat64Swapped(b) * 10, err
+	return rs485.RTUUint32ToFloat64Swapped(b) / (60 * 60 * 100) , err //Deka Watt -> kwh
 }
 
 // currents implements the api.MeterCurrent interface
