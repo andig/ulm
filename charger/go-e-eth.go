@@ -31,8 +31,6 @@ func init() {
 	registry.Add("go-e-eth", NewGoEEthFromConfig)
 }
 
-//go:generate go run ../cmd/tools/decorate.go -f decorateGoEEth -b *GoEEth -r api.Charger -t "api.Meter,CurrentPower,func() (float64, error)" -t "api.MeterEnergy,TotalEnergy,func() (float64, error)" -t "api.MeterCurrent,Currents,func() (float64, float64, float64, error)"
-
 // NewGoEEthFromConfig creates a Go-E charger from generic config
 func NewGoEEthFromConfig(other map[string]interface{}) (api.Charger, error) {
 	cc := struct {
@@ -47,18 +45,7 @@ func NewGoEEthFromConfig(other map[string]interface{}) (api.Charger, error) {
 		return nil, err
 	}
 
-	wb, err := NewGoEEth(cc.URI, cc.ID)
-
-	var currentPower func() (float64, error)
-        currentPower = wb.currentPower
-
-	var totalEnergy func() (float64, error)
-        totalEnergy = wb.totalEnergy
-
-	var currents func() (float64, float64, float64, error)
-        currents = wb.currents
-
-	return decorateGoEEth(wb, currentPower, totalEnergy, currents), err
+	return NewGoEEth(cc.URI, cc.ID)
 }
 
 // NewGoEEth creates a Phoenix charger
@@ -137,7 +124,7 @@ func (wb *GoEEth) MaxCurrent(current int64) error {
 }
 
 // CurrentPower implements the api.Meter interface
-func (wb *GoEEth) currentPower() (float64, error) {
+func (wb *GoEEth) CurrentPower() (float64, error) {
 	b, err := wb.conn.ReadInputRegisters(goEEthRegPower, 2)
 	if err != nil {
 		return 0, err
@@ -146,8 +133,8 @@ func (wb *GoEEth) currentPower() (float64, error) {
 	return rs485.RTUUint32ToFloat64Swapped(b) / 100, err
 }
 
-// totalEnergy implements the api.MeterEnergy interface
-func (wb *GoEEth) totalEnergy() (float64, error) {
+// TotalEnergy implements the api.MeterEnergy interface
+func (wb *GoEEth) TotalEnergy() (float64, error) {
 	b, err := wb.conn.ReadInputRegisters(goEEthRegEnergy, 2)
 	if err != nil {
 		return 0, err
@@ -156,8 +143,8 @@ func (wb *GoEEth) totalEnergy() (float64, error) {
 	return rs485.RTUUint32ToFloat64Swapped(b) / (60 * 60 * 100) , err //Deka Watt -> kwh
 }
 
-// currents implements the api.MeterCurrent interface
-func (wb *GoEEth) currents() (float64, float64, float64, error) {
+// Currents implements the api.MeterCurrent interface
+func (wb *GoEEth) Currents() (float64, float64, float64, error) {
 	var currents []float64
 	for _, regCurrent := range goEEthRegCurrents {
 		b, err := wb.conn.ReadInputRegisters(regCurrent, 2)
