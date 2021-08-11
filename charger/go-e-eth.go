@@ -45,6 +45,9 @@ func NewGoEEthFromConfig(other map[string]interface{}) (api.Charger, error) {
 		URI: "192.168.0.8:502", // default
 		ID:  180,               // default
 	}
+        cc.Meter.Power = true
+        cc.Meter.Energy = true
+        cc.Meter.Currents = true
 
 	if err := util.DecodeOther(other, &cc); err != nil {
 		return nil, err
