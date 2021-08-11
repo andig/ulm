@@ -38,16 +38,10 @@ func NewGoEEthFromConfig(other map[string]interface{}) (api.Charger, error) {
 	cc := struct {
 		URI   string
 		ID    uint8
-		Meter struct {
-			Power, Energy, Currents bool
-		}
 	}{
 		URI: "192.168.0.8:502", // default
 		ID:  180,               // default
 	}
-        cc.Meter.Power = true
-        cc.Meter.Energy = true
-        cc.Meter.Currents = true
 
 	if err := util.DecodeOther(other, &cc); err != nil {
 		return nil, err
@@ -56,19 +50,13 @@ func NewGoEEthFromConfig(other map[string]interface{}) (api.Charger, error) {
 	wb, err := NewGoEEth(cc.URI, cc.ID)
 
 	var currentPower func() (float64, error)
-	if cc.Meter.Power {
-		currentPower = wb.currentPower
-	}
+        currentPower = wb.currentPower
 
 	var totalEnergy func() (float64, error)
-	if cc.Meter.Energy {
-		totalEnergy = wb.totalEnergy
-	}
+        totalEnergy = wb.totalEnergy
 
 	var currents func() (float64, float64, float64, error)
-	if cc.Meter.Currents {
-		currents = wb.currents
-	}
+        currents = wb.currents
 
 	return decorateGoEEth(wb, currentPower, totalEnergy, currents), err
 }
