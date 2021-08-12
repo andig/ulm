@@ -55,7 +55,7 @@ func NewGoEModbus(uri string, id uint8) (*GoEModbus, error) {
 		return nil, err
 	}
 
-	log := util.NewLogger("em-eth")
+	log := util.NewLogger("go-e-modbus")
 	conn.Logger(log.TRACE)
 
 	wb := &GoEModbus{
