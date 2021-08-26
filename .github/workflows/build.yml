@@ -15,13 +15,15 @@ jobs:
         go-version: ^1.16
       id: go
 
-    - uses: actions/cache@v2
+    - name: Cache Go modules
+      uses: actions/cache@v2
       with:
         path: |
           ~/go/pkg/mod
-        key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          ~/.cache/go-build
+        key: ${{ runner.os }}-${{ matrix.go-version }}-go-${{ hashFiles('**/go.sum') }}
         restore-keys: |
-          ${{ runner.os }}-go-
+          ${{ runner.os }}-${{ matrix.go-version }}-go-
 
     - name: Checkout
       uses: actions/checkout@v2
@@ -55,7 +57,8 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/cache@v2
+    - name: Cache NPM modules
+      uses: actions/cache@v2
       with:
         path: |
           **/node_modules
@@ -97,7 +100,7 @@ jobs:
 
     - name: Install
       env:
-        SEIHON_VERSION: v0.8.3
+        SEIHON_VERSION: v0.8.4
       run: curl -sfL https://raw.githubusercontent.com/ldez/seihon/master/godownloader.sh | sudo bash -s -- -b $GOPATH/bin ${SEIHON_VERSION}
 
     - name: Login
@@ -107,7 +110,7 @@ jobs:
         password: ${{ secrets.DOCKER_PASS }}
 
     - name: Publish
-      run: make publish-latest
+      run: make publish-latest-ci
 
 
   dockerrelease:
@@ -152,14 +155,15 @@ jobs:
       with:
         fetch-depth: 0
 
-    - uses: actions/cache@v2
+    - name: Cache Go modules
+      uses: actions/cache@v2
       with:
         path: |
           ~/go/pkg/mod
-          **/node_modules
-        key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}-${{ hashFiles('**/package-lock.json') }}
+          ~/.cache/go-build
+        key: ${{ runner.os }}-${{ matrix.go-version }}-go-${{ hashFiles('**/go.sum') }}
         restore-keys: |
-          ${{ runner.os }}-go-
+          ${{ runner.os }}-${{ matrix.go-version }}-go-
 
     - name: Set up Go
       uses: actions/setup-go@v2
@@ -170,7 +174,7 @@ jobs:
     - name: Prepare Image
       run: |
         make prepare-image
-        sed -i -e 's#-ld.*$#& -X github.com/andig/evcc/server/updater.Password=${{ secrets.IMAGE_PASS }}#' buildflags/github.com/andig/evcc/buildflags.txt
+        sed -i -e 's#-ld.*$#& -X github.com/evcc-io/evcc/server/updater.Password=${{ secrets.IMAGE_PASS }}#' buildflags/github.com/evcc-io/evcc/buildflags.txt
         mkdir /home/runner/.config/gokrazy
         echo ${{ secrets.IMAGE_PASS }}> /home/runner/.config/gokrazy/http-password.txt
 

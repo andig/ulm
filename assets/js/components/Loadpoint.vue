@@ -16,6 +16,7 @@
 				class="col-12 col-md-6 col-lg-8 mb-4"
 				v-bind="vehicle"
 				@target-soc-updated="setTargetSoC"
+				@target-time-updated="setTargetTime"
 			/>
 		</div>
 		<LoadpointDetails v-bind="details" />
@@ -49,8 +50,8 @@ export default {
 		connected: Boolean,
 		// charging: Boolean,
 		enabled: Boolean,
-		socTitle: String,
-		socCharge: Number,
+		vehicleTitle: String,
+		vehicleSoc: Number,
 		minSoC: Number,
 		timerSet: Boolean,
 		timerActive: Boolean,
@@ -60,7 +61,7 @@ export default {
 		chargePower: Number,
 		chargedEnergy: Number,
 		// chargeDuration: Number,
-		hasVehicle: Boolean,
+		vehiclePresent: Boolean,
 		climater: String,
 		range: Number,
 		chargeEstimate: Number,
@@ -71,7 +72,7 @@ export default {
 		maxCurrent: Number,
 		activePhases: Number,
 		chargeCurrent: Number,
-		socCapacity: Number,
+		vehicleCapacity: Number,
 		connectedDuration: Number,
 		chargeCurrents: Array,
 		chargeConfigured: Boolean,
@@ -132,6 +133,12 @@ export default {
 						this.targetSoC = response.data.targetSoC;
 					}.bind(this)
 				)
+				.catch(window.app.error);
+		},
+		setTargetTime: function (date) {
+			const formattedDate = `${this.fmtDayString(date)}T${this.fmtTimeString(date)}:00`;
+			axios
+				.post(this.api("targetcharge") + "/" + this.targetSoC + "/" + formattedDate)
 				.catch(window.app.error);
 		},
 	},

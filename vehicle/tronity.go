@@ -1,5 +1,22 @@
 package vehicle
 
+// LICENSE
+
+// Copyright (c) 2019-2021 andig
+
+// This module is NOT covered by the MIT license. All rights reserved.
+
+// The above copyright notice and this permission notice shall be included in all
+// copies or substantial portions of the Software.
+
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
+
 import (
 	"context"
 	"errors"
@@ -8,13 +25,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/andig/evcc/api"
-	"github.com/andig/evcc/provider"
-	"github.com/andig/evcc/util"
-	"github.com/andig/evcc/util/oauth"
-	"github.com/andig/evcc/util/request"
-	"github.com/andig/evcc/util/sponsor"
-	"github.com/andig/evcc/vehicle/tronity"
+	"github.com/evcc-io/evcc/api"
+	"github.com/evcc-io/evcc/provider"
+	"github.com/evcc-io/evcc/util"
+	"github.com/evcc-io/evcc/util/oauth"
+	"github.com/evcc-io/evcc/util/request"
+	"github.com/evcc-io/evcc/util/sponsor"
+	"github.com/evcc-io/evcc/vehicle/tronity"
 	"golang.org/x/oauth2"
 )
 
@@ -32,7 +49,7 @@ func init() {
 	registry.Add("tronity", NewTronityFromConfig)
 }
 
-// NewTronityFromConfig creates a new Tronity vehicle
+// NewTronityFromConfig creates a new vehicle
 func NewTronityFromConfig(other map[string]interface{}) (api.Vehicle, error) {
 	cc := struct {
 		embed       `mapstructure:",squash"`
@@ -53,7 +70,7 @@ func NewTronityFromConfig(other map[string]interface{}) (api.Vehicle, error) {
 	}
 
 	if !sponsor.IsAuthorized() {
-		return nil, errors.New("tronity requires evcc sponsorship, register at https://cloud.evcc.io")
+		return nil, api.ErrSponsorRequired
 	}
 
 	// authenticated http client with logging injected to the tronity client
@@ -200,7 +217,18 @@ func (v *Tronity) Range() (int64, error) {
 	return 0, err
 }
 
-var _ api.VehicleStartCharge = (*Tronity)(nil)
+var _ api.VehicleOdometer = (*Tronity)(nil)
+
+// Odometer implements the api.VehicleOdometer interface
+func (v *Tronity) Odometer() (float64, error) {
+	res, err := v.bulkG()
+
+	if res, ok := res.(tronity.Bulk); err == nil && ok {
+		return res.Odometer, nil
+	}
+
+	return 0, err
+}
 
 func (v *Tronity) post(uri string) error {
 	resp, err := v.Post(uri, "", nil)
@@ -217,6 +245,8 @@ func (v *Tronity) post(uri string) error {
 
 	return err
 }
+
+var _ api.VehicleStartCharge = (*Tronity)(nil)
 
 // StartCharge implements the api.VehicleStartCharge interface
 func (v *Tronity) StartCharge() error {

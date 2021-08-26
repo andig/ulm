@@ -1,17 +1,33 @@
 package charger
 
+// LICENSE
+
+// Copyright (c) 2019-2021 andig
+
+// This module is NOT covered by the MIT license. All rights reserved.
+
+// The above copyright notice and this permission notice shall be included in all
+// copies or substantial portions of the Software.
+
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
+
 import (
-	"errors"
 	"fmt"
 	"net/http"
 	"time"
 
-	"github.com/andig/evcc/api"
-	"github.com/andig/evcc/charger/easee"
-	"github.com/andig/evcc/core"
-	"github.com/andig/evcc/util"
-	"github.com/andig/evcc/util/request"
-	"github.com/andig/evcc/util/sponsor"
+	"github.com/evcc-io/evcc/api"
+	"github.com/evcc-io/evcc/charger/easee"
+	"github.com/evcc-io/evcc/core"
+	"github.com/evcc-io/evcc/util"
+	"github.com/evcc-io/evcc/util/request"
+	"github.com/evcc-io/evcc/util/sponsor"
 	"github.com/thoas/go-funk"
 	"golang.org/x/oauth2"
 )
@@ -19,15 +35,17 @@ import (
 // Easee charger implementation
 type Easee struct {
 	*request.Helper
-	charger           string
-	site, circuit     int
-	status            easee.ChargerStatus
-	updated           time.Time
-	cache             time.Duration
-	lp                core.LoadPointAPI
-	lastSmartCharging bool
-	lastChargeMode    api.ChargeMode
-	log               *util.Logger
+	charger       string
+	site, circuit int
+	status        easee.ChargerStatus
+	updated       time.Time
+	cache         time.Duration
+	lp            core.LoadPointAPI
+	//lastSmartCharging bool
+	//lastChargeMode api.ChargeMode
+	log     *util.Logger
+	phases  int
+	current float64
 }
 
 func init() {
@@ -58,7 +76,7 @@ func NewEasee(user, password, charger string, circuit int, cache time.Duration) 
 	log := util.NewLogger("easee")
 
 	if !sponsor.IsAuthorized() {
-		return nil, errors.New("easee requires evcc sponsorship, register at https://cloud.evcc.io")
+		return nil, api.ErrSponsorRequired
 	}
 
 	c := &Easee{
@@ -67,6 +85,7 @@ func NewEasee(user, password, charger string, circuit int, cache time.Duration) 
 		circuit: circuit,
 		cache:   cache,
 		log:     log,
+		phases:  3,
 	}
 
 	ts, err := easee.TokenSource(log, user, password)
@@ -136,6 +155,7 @@ func (c *Easee) chargerDetails() (res easee.Site, err error) {
 	return res, err
 }
 
+/*
 func (c *Easee) syncSmartCharging() error {
 	if c.lp == nil {
 		return nil
@@ -178,6 +198,7 @@ func (c *Easee) syncSmartCharging() error {
 	}
 	return nil
 }
+*/
 
 func (c *Easee) state() (easee.ChargerStatus, error) {
 	if time.Since(c.updated) < c.cache {
@@ -188,7 +209,7 @@ func (c *Easee) state() (easee.ChargerStatus, error) {
 	req, err := request.New(http.MethodGet, uri, nil, request.JSONEncoding)
 	if err == nil {
 		if err = c.DoJSON(req, &c.status); err == nil {
-			err = c.syncSmartCharging()
+			// err = c.syncSmartCharging()
 			c.updated = time.Now()
 		}
 	}
@@ -269,27 +290,40 @@ var _ api.ChargerEx = (*Easee)(nil)
 
 // MaxCurrentMillis implements the api.ChargerEx interface
 func (c *Easee) MaxCurrentMillis(current float64) error {
-	cur := int(current)
+	var current23 float64
+	if c.phases > 1 {
+		current23 = current
+	}
+
 	data := easee.CircuitSettings{
-		DynamicCircuitCurrentP1: &cur,
-		DynamicCircuitCurrentP2: &cur,
-		DynamicCircuitCurrentP3: &cur,
+		DynamicCircuitCurrentP1: &current,
+		DynamicCircuitCurrentP2: &current23,
+		DynamicCircuitCurrentP3: &current23,
 	}
 
 	uri := fmt.Sprintf("%s/sites/%d/circuits/%d/settings", easee.API, c.site, c.circuit)
 	resp, err := c.Post(uri, request.JSONContent, request.MarshalJSON(data))
 	if err == nil {
 		resp.Body.Close()
-	}
 
-	c.updated = time.Time{} // clear cache
+		c.updated = time.Time{} // clear cache
+		c.current = current
+	}
 
 	return err
 }
 
+var _ api.ChargePhases = (*Easee)(nil)
+
+// Phases1p3p implements the api.ChargePhases interface
+func (c *Easee) Phases1p3p(phases int) error {
+	c.phases = phases
+	return c.MaxCurrentMillis(c.current)
+}
+
 var _ api.Meter = (*Easee)(nil)
 
-// CurrentPower implements the api.Meter interface.
+// CurrentPower implements the api.Meter interface
 func (c *Easee) CurrentPower() (float64, error) {
 	res, err := c.state()
 	return 1e3 * res.TotalPower, err

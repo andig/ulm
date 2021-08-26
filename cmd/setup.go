@@ -8,20 +8,20 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/andig/evcc/api"
-	"github.com/andig/evcc/api/proto/pb"
-	"github.com/andig/evcc/core"
-	"github.com/andig/evcc/hems"
-	"github.com/andig/evcc/provider/javascript"
-	"github.com/andig/evcc/provider/mqtt"
-	"github.com/andig/evcc/push"
-	"github.com/andig/evcc/server"
-	"github.com/andig/evcc/tariff"
-	"github.com/andig/evcc/util"
-	"github.com/andig/evcc/util/cloud"
-	"github.com/andig/evcc/util/pipe"
-	"github.com/andig/evcc/util/sponsor"
 	paho "github.com/eclipse/paho.mqtt.golang"
+	"github.com/evcc-io/evcc/api"
+	"github.com/evcc-io/evcc/api/proto/pb"
+	"github.com/evcc-io/evcc/core"
+	"github.com/evcc-io/evcc/hems"
+	"github.com/evcc-io/evcc/provider/javascript"
+	"github.com/evcc-io/evcc/provider/mqtt"
+	"github.com/evcc-io/evcc/push"
+	"github.com/evcc-io/evcc/server"
+	"github.com/evcc-io/evcc/tariff"
+	"github.com/evcc-io/evcc/util"
+	"github.com/evcc-io/evcc/util/cloud"
+	"github.com/evcc-io/evcc/util/pipe"
+	"github.com/evcc-io/evcc/util/sponsor"
 	"github.com/spf13/viper"
 )
 
@@ -58,6 +58,11 @@ func configureEnvironment(conf config) (err error) {
 	// setup javascript VMs
 	if err == nil {
 		err = configureJavascript(conf.Javascript)
+	}
+
+	// setup EEBus server
+	if err == nil && conf.EEBus != nil {
+		err = configureEEBus(conf.EEBus)
 	}
 
 	return
@@ -101,7 +106,7 @@ func configureDatabase(conf server.InfluxConfig, loadPoints []core.LoadPointAPI,
 	)
 
 	// eliminate duplicate values
-	dedupe := pipe.NewDeduplicator(30*time.Minute, "socCharge")
+	dedupe := pipe.NewDeduplicator(30*time.Minute, "vehicleSoc")
 	in = dedupe.Pipe(in)
 
 	// reduce number of values written to influx
@@ -146,6 +151,16 @@ func configureHEMS(conf typedConfig, site *core.Site, cache *util.Cache, httpd *
 		log.FATAL.Fatalf("failed configuring hems: %v", err)
 	}
 	return hems
+}
+
+// setup EEBus
+func configureEEBus(conf map[string]interface{}) error {
+	var err error
+	if server.EEBusInstance, err = server.NewEEBus(conf); err == nil {
+		go server.EEBusInstance.Run()
+	}
+
+	return nil
 }
 
 // setup messaging
