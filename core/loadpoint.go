@@ -65,8 +65,10 @@ type ThresholdConfig struct {
 
 // ActionConfig defines an action to take on event
 type ActionConfig struct {
-	Mode      api.ChargeMode `mapstructure:"mode"`      // Charge mode to apply when car disconnected
-	TargetSoC int            `mapstructure:"targetSoC"` // Target SoC to apply when car disconnected
+	Mode       api.ChargeMode `mapstructure:"mode"` // Charge mode to apply when car disconnected
+	MinCurrent float64
+	MaxCurrent float64
+	TargetSoC  int `mapstructure:"targetSoC"` // Target SoC to apply when car disconnected
 }
 
 // LoadPoint is responsible for controlling charge depending on
@@ -392,6 +394,12 @@ func (lp *LoadPoint) applyAction(action ActionConfig) {
 	if action.Mode != "" && lp.GetMode() != api.ModeEmpty {
 		lp.SetMode(action.Mode)
 	}
+	if action.MinCurrent != 0 {
+		lp.SetMinCurrent(action.MinCurrent)
+	}
+	if action.MaxCurrent != 0 {
+		lp.SetMaxCurrent(action.MaxCurrent)
+	}
 	if action.TargetSoC != 0 {
 		_ = lp.SetTargetSoC(action.TargetSoC)
 	}
@@ -655,17 +663,17 @@ func (lp *LoadPoint) identifyVehicle() {
 func (lp *LoadPoint) selectVehicleByID(id string) api.Vehicle {
 	// find exact match
 	for _, vehicle := range lp.vehicles {
-		if vid, err := vehicle.Identify(); err == nil && vid == id {
+		if vid := vehicle.Identify(); vid == id {
 			return vehicle
 		}
 	}
 
 	// find placeholder match
 	for _, vehicle := range lp.vehicles {
-		if vid, err := vehicle.Identify(); err == nil && vid != "" {
-			re, err := regexp.Compile(strings.ReplaceAll(vid, "*", ".*?"))
+		if vid := vehicle.Identify(); vid != "" {
+			re, err := regexp.Compile(vid)
 			if err != nil {
-				lp.log.ERROR.Printf("vehicle id: %v", err)
+				lp.log.ERROR.Printf("vehicle id '%s' is not a regex: %v", vid, err)
 				continue
 			}
 

@@ -106,7 +106,7 @@ type Identifier interface {
 // Vehicle represents the EV and it's battery
 type Vehicle interface {
 	Battery
-	Identifier
+	Identify() string
 	Title() string
 	Capacity() int64
 }
