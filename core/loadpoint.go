@@ -42,12 +42,10 @@ type PollConfig struct {
 
 // SoCConfig defines soc settings, estimation and update behaviour
 type SoCConfig struct {
-	Poll         PollConfig `mapstructure:"poll"`
-	AlwaysUpdate bool       `mapstructure:"alwaysUpdate"`
-	Estimate     bool       `mapstructure:"estimate"`
-	Min          int        `mapstructure:"min"`    // Default minimum SoC, guarded by mutex
-	Target       int        `mapstructure:"target"` // Default target SoC, guarded by mutex
-	Levels       []int      `mapstructure:"levels"` // deprecated
+	Poll     PollConfig `mapstructure:"poll"`
+	Estimate bool       `mapstructure:"estimate"`
+	Min      int        `mapstructure:"min"`    // Default minimum SoC, guarded by mutex
+	Target   int        `mapstructure:"target"` // Default target SoC, guarded by mutex
 }
 
 // Poll modes
@@ -130,9 +128,11 @@ type LoadPoint struct {
 	pvTimer        time.Time        // PV enabled/disable timer
 	phaseTimer     time.Time        // 1p3p switch timer
 
-	socCharge      float64       // Vehicle SoC
+	vehicleSoc     float64       // Vehicle SoC
 	chargedEnergy  float64       // Charged energy while connected in Wh
 	chargeDuration time.Duration // Charge duration
+
+	tasks []func() error // task list for repeated execution
 }
 
 // NewLoadPointFromConfig creates a new loadpoint
@@ -141,10 +141,6 @@ func NewLoadPointFromConfig(log *util.Logger, cp configProvider, other map[strin
 	if err := util.DecodeOther(other, &lp); err != nil {
 		return nil, err
 	}
-
-	// set sane defaults
-	lp.Mode = api.ChargeModeString(string(lp.Mode))
-	lp.OnDisconnect.Mode = api.ChargeModeString(string(lp.OnDisconnect.Mode))
 
 	// set vehicle polling mode
 	switch lp.SoC.Poll.Mode = strings.ToLower(lp.SoC.Poll.Mode); lp.SoC.Poll.Mode {
@@ -155,11 +151,7 @@ func NewLoadPointFromConfig(log *util.Logger, cp configProvider, other map[strin
 		if lp.SoC.Poll.Mode != "" {
 			log.WARN.Printf("invalid poll mode: %s", lp.SoC.Poll.Mode)
 		}
-		if lp.SoC.AlwaysUpdate {
-			log.WARN.Println("alwaysUpdate is deprecated and will be removed in a future release. Use poll instead.")
-		} else {
-			lp.SoC.Poll.Mode = pollConnected
-		}
+		lp.SoC.Poll.Mode = pollConnected
 	}
 
 	// set vehicle polling interval
@@ -169,10 +161,6 @@ func NewLoadPointFromConfig(log *util.Logger, cp configProvider, other map[strin
 		} else {
 			log.WARN.Printf("poll interval '%v' is lower than %v and may deplete your battery or lead to API misuse. USE AT YOUR OWN RISK.", lp.SoC.Poll.Interval, pollInterval)
 		}
-	}
-
-	if len(lp.SoC.Levels) > 0 {
-		log.WARN.Printf("soc.levels are deprecated and will be removed in an upcoming release")
 	}
 
 	if lp.SoC.Target == 0 {
@@ -401,7 +389,7 @@ func (lp *LoadPoint) evChargeCurrentWrappedMeterHandler(current float64) {
 
 // applyAction executes the action
 func (lp *LoadPoint) applyAction(action ActionConfig) {
-	if action.Mode != "" && lp.GetMode() != api.ModeOff {
+	if action.Mode != "" && lp.GetMode() != api.ModeEmpty {
 		lp.SetMode(action.Mode)
 	}
 	if action.TargetSoC != 0 {
@@ -578,7 +566,7 @@ func (lp *LoadPoint) targetSocReached() bool {
 	return lp.vehicle != nil &&
 		lp.SoC.Target > 0 &&
 		lp.SoC.Target < 100 &&
-		lp.socCharge >= float64(lp.SoC.Target)
+		lp.vehicleSoc >= float64(lp.SoC.Target)
 }
 
 // minSocNotReached checks if minimum is configured and not reached.
@@ -586,7 +574,7 @@ func (lp *LoadPoint) targetSocReached() bool {
 func (lp *LoadPoint) minSocNotReached() bool {
 	return lp.vehicle != nil &&
 		lp.SoC.Min > 0 &&
-		lp.socCharge < float64(lp.SoC.Min)
+		lp.vehicleSoc < float64(lp.SoC.Min)
 }
 
 // climateActive checks if vehicle has active climate request
@@ -649,7 +637,7 @@ func (lp *LoadPoint) identifyVehicle() {
 	lp.vehicleID = id
 
 	lp.log.DEBUG.Println("charger vehicle id:", id)
-	lp.publish("socIdentity", id)
+	lp.publish("vehicleIdentity", id)
 
 	if id != "" {
 		if vehicle := lp.selectVehicleByID(id); vehicle != nil {
@@ -711,15 +699,18 @@ func (lp *LoadPoint) setActiveVehicle(vehicle api.Vehicle) {
 	if lp.vehicle = vehicle; vehicle != nil {
 		lp.socEstimator = soc.NewEstimator(lp.log, lp.charger, vehicle, lp.SoC.Estimate)
 
-		lp.publish("hasVehicle", true)
-		lp.publish("socTitle", lp.vehicle.Title())
-		lp.publish("socCapacity", lp.vehicle.Capacity())
+		lp.publish("vehiclePresent", true)
+		lp.publish("vehicleTitle", lp.vehicle.Title())
+		lp.publish("vehicleCapacity", lp.vehicle.Capacity())
+
+		lp.task(lp.odometer)
 	} else {
 		lp.socEstimator = nil
 
-		lp.publish("hasVehicle", false)
-		lp.publish("socTitle", "")
-		lp.publish("socCapacity", 0)
+		lp.publish("vehiclePresent", false)
+		lp.publish("vehicleTitle", "")
+		lp.publish("vehicleCapacity", int64(0))
+		lp.publish("vehicleOdometer", 0.0)
 	}
 }
 
@@ -1169,9 +1160,9 @@ func (lp *LoadPoint) publishSoCAndRange() {
 
 		f, err := lp.socEstimator.SoC(lp.chargedEnergy)
 		if err == nil {
-			lp.socCharge = math.Trunc(f)
-			lp.log.DEBUG.Printf("vehicle soc: %.0f%%", lp.socCharge)
-			lp.publish("socCharge", lp.socCharge)
+			lp.vehicleSoc = math.Trunc(f)
+			lp.log.DEBUG.Printf("vehicle soc: %.0f%%", lp.vehicleSoc)
+			lp.publish("vehicleSoc", lp.vehicleSoc)
 
 			chargeEstimate := time.Duration(-1)
 			if lp.charging() {
@@ -1184,9 +1175,8 @@ func (lp *LoadPoint) publishSoCAndRange() {
 		} else {
 			if errors.Is(err, api.ErrMustRetry) {
 				lp.socUpdated = time.Time{}
-				lp.log.DEBUG.Printf("vehicle: waiting for update")
 			} else {
-				lp.log.ERROR.Printf("vehicle: %v", err)
+				lp.log.ERROR.Printf("vehicle soc: %v", err)
 			}
 		}
 
@@ -1203,7 +1193,7 @@ func (lp *LoadPoint) publishSoCAndRange() {
 
 	// reset if poll: connected/charging and not connected
 	if lp.SoC.Poll.Mode != pollAlways && !lp.connected() {
-		lp.publish("socCharge", -1)
+		lp.publish("vehicleSoc", -1)
 		lp.publish("chargeEstimate", time.Duration(-1))
 
 		// range
@@ -1248,6 +1238,9 @@ func (lp *LoadPoint) Update(sitePower float64, cheap bool) {
 		}
 	}
 
+	// odometer etc, if active
+	lp.runTasks()
+
 	// publish soc after updating charger status to make sure
 	// initial update of connected state matches charger status
 	lp.publishSoCAndRange()
@@ -1269,7 +1262,7 @@ func (lp *LoadPoint) Update(sitePower float64, cheap bool) {
 		err = lp.setLimit(0, false)
 
 	case lp.targetSocReached():
-		lp.log.DEBUG.Printf("targetSoC reached: %.1f > %d", lp.socCharge, lp.SoC.Target)
+		lp.log.DEBUG.Printf("targetSoC reached: %.1f > %d", lp.vehicleSoc, lp.SoC.Target)
 		var targetCurrent float64 // zero disables
 		if lp.climateActive() {
 			lp.log.DEBUG.Println("climater active")

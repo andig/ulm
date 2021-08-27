@@ -9,6 +9,7 @@ type ChargeMode string
 
 // Charge modes
 const (
+	ModeEmpty ChargeMode = ""
 	ModeOff   ChargeMode = "off"
 	ModeNow   ChargeMode = "now"
 	ModeMinPV ChargeMode = "minpv"
@@ -123,6 +124,11 @@ type VehicleRange interface {
 // VehicleClimater provides climatisation data
 type VehicleClimater interface {
 	Climater() (active bool, outsideTemp float64, targetTemp float64, err error)
+}
+
+// VehicleOdometer returns the vehicles milage
+type VehicleOdometer interface {
+	Odometer() (float64, error)
 }
 
 // VehicleStartCharge starts the charging session on the vehicle side
