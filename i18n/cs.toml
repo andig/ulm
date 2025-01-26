@@ -36,6 +36,8 @@ description = "Obvykle jsou přednastavené hodnoty správné. Změňte jen poku
 [config.deviceValue]
 capacity = "Kapacita"
 chargeStatus = "Stav"
+chargeStatusA = "nepřipojeno"
+chargeStatusB = "připojeno"
 chargedEnergy = "Nabito"
 configured = "Nastaveno"
 currency = "Měna"
