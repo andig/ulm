@@ -52,6 +52,8 @@ power = "Výkon"
 range = "Rozsah"
 soc = "SoC"
 socLimit = "Strop"
+chargeStatusB = "připojeno"
+chargeStatusA = "nepřipojeno"
 
 [config.eebus]
 description = "Nastavení, které umožňuje evcc komunikovat s dalšími EEBus zařízeními."
