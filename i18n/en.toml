@@ -433,6 +433,31 @@ modalUpdateNow = "Install now"
 modalUpdateStarted = "Starting the new version of evcc…"
 modalUpdateStatusStart = "Installation started:"
 
+[forecast]
+modalTitle = "Forecast"
+
+[forecast.co2]
+average = "Average"
+lowestHour = "Cleanest hour"
+range = "Range"
+
+[forecast.price]
+average = "Average"
+lowestHour = "Cheapest hour"
+range = "Range"
+
+[forecast.solar]
+dayAfterTomorrow = "Day after tomorrow"
+partly = "partly"
+remaining = "remaining"
+today = "Today"
+tomorrow = "Tomorrow"
+
+[forecast.type]
+co2 = "CO₂"
+price = "Price"
+solar = "Solar"
+
 [header]
 about = "About"
 blog = "Blog"
